@@ -5,120 +5,113 @@ import random
 import string
 import re
 import threading
+from rich.console import Console
+from rich.panel import Panel
+from retrying import retry
+from threading import Lock
 
-# Connect to the device
+# Initialize rich console and a lock for thread-safe outputs
+console = Console()
+console_lock = Lock()
+
+# Connect to the device using uiautomator2
 device = u2.connect()
 
-# Define global flags
+# Global flags for tracking task status
 task_completed = False
 otp_extracted = False
 
+# Retry decorator for automatic retries on failure
+@retry(stop_max_attempt_number=3, wait_fixed=500)
+def retry_on_failure(func, *args, **kwargs):
+    return func(*args, **kwargs)
+
+# Function to display rich panels with custom messages (thread-safe output)
+def show_panel(title, content, style="bold green"):
+    with console_lock:
+        console.print(Panel(content, title=title, style=style))
+
 # Function to close any open settings or windows
 def close_open_windows():
-    print("Closing any open windows...")
+    show_panel("Closing Windows", "Closing any open windows...")
     for _ in range(5):
         if device.press("back"):
             time.sleep(0.1)
         else:
             break
-    print("All open windows closed.\n")
+    console.log("[green]All open windows closed.\n")
 
-# Function to close the app
+# Function to stop the app
 def close_app():
-    print("Closing the app...")
+    show_panel("Closing App", "Stopping the app...")
     device.app_stop("io.sauces.app")
     time.sleep(0.1)
-    print("App closed.\n")
+    console.log("[green]App closed.\n")
 
-# Function to wait for an element with frequent checks for fast response
+# Function to wait for an element and return it
 def wait_for_element(selector, timeout=5, interval=0.05, retry_until_found=False):
     start_time = time.time()
     while True:
-        try:
-            element = device(**selector)
-            if element.exists:
-                return element
-        except Exception as e:
-            print(f"Encountered an error while waiting for element: {str(e)}")
+        element = device(**selector)
+        if element.exists:
+            return element
         if not retry_until_found and time.time() - start_time > timeout:
-            device.screenshot(f"error_{selector.get('text', 'unknown')}.png")
-            raise Exception(f"Element with selector {selector} not found within {timeout} seconds.")
+            raise Exception(f"Element {selector} not found within {timeout} seconds.")
         time.sleep(interval)
 
-# Function to clear app data using UI automation
-def clear_app_data_ui(retries=3):
-    print("Clearing app data using UI automation...")
-    for attempt in range(retries):
-        try:
-            close_app()
+# Function to clear app data via UI automation
+def clear_app_data_ui():
+    show_panel("Clearing Data", "Clearing app data using UI automation...")
+    close_app()
 
-            # Long press on the "Sauces" app icon on the home screen
-            app_icon = wait_for_element({'text': 'Sauces'}, retry_until_found=True)
-            app_icon.long_click(duration=0.5)
+    # Long press on app icon and navigate to app info
+    app_icon = retry_on_failure(wait_for_element, {'text': 'Sauces'}, retry_until_found=True)
+    app_icon.long_click(duration=0.5)
 
-            # Wait and click on the "App info" option
-            app_info = wait_for_element({'text': 'App info'}, retry_until_found=True)
-            app_info.click()
+    app_info = retry_on_failure(wait_for_element, {'text': 'App info'}, retry_until_found=True)
+    app_info.click()
 
-            # Click on "Storage usage"
-            storage_usage = wait_for_element({'text': 'Storage usage'}, retry_until_found=True)
-            storage_usage.click()
+    # Navigate to Storage usage and clear data
+    storage_usage = retry_on_failure(wait_for_element, {'text': 'Storage usage'}, retry_until_found=True)
+    storage_usage.click()
 
-            # Wait until "Clear data" button appears
-            clear_data_button = wait_for_element({'text': 'Clear data'}, timeout=3, retry_until_found=True)
+    clear_data_button = retry_on_failure(wait_for_element, {'text': 'Clear data'}, retry_until_found=True)
 
-            # Check if data is already cleared (0B)
-            if device(text="0B").exists:
-                print("Data is already cleared (0B). Skipping to next step.\n")
-                return
+    if clear_data_button.info['enabled']:
+        clear_data_button.click()
+        delete_button = retry_on_failure(wait_for_element, {'text': 'Delete'}, retry_until_found=True)
+        delete_button.click()
+    else:
+        show_panel("Skipping", "Data already cleared.", style="bold yellow")
 
-            # Click on "Clear data" if enabled
-            if clear_data_button.info['enabled']:
-                clear_data_button.click()
+    console.log("[green]App data cleared successfully.\n")
 
-                # Confirm "Delete" if needed
-                delete_button = wait_for_element({'text': 'Delete'}, retry_until_found=True)
-                delete_button.click()
-                print("App data cleared successfully.\n")
-                return
-            else:
-                print("Clear data button is not clickable. Skipping to next step.\n")
-                return
-
-        except Exception as e:
-            print(f"Error clearing app data: {str(e)}. Attempt {attempt + 1}/{retries} failed.\n")
-            if attempt < retries - 1:
-                print("Retrying to clear app data...\n")
-                time.sleep(0.5)
-            else:
-                print("Failed to clear app data after multiple attempts.\n")
-                raise
-
-# Function to generate a random 9-character nickname (letters and digits)
+# Function to generate a random nickname of letters and digits
 def generate_random_nickname(length=9):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
-# Function to get a temporary email address
+# Function to retrieve a temporary email address
 def get_temp_email():
     response = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1")
     if response.status_code == 200:
         email_address = response.json()[0]
-        print(f"Generated temporary email: {email_address}\n")
+        show_panel("Temporary Email", f"Generated temporary email: {email_address}")
         return email_address
     else:
         raise Exception("Failed to retrieve temporary email.")
 
-# Function to extract the OTP from temp email
+# Function to extract OTP from the temporary email
 def get_otp(email):
     global otp_extracted
     domain = email.split('@')[1]
     username = email.split('@')[0]
 
-    print(f"Waiting for OTP email at {username}@{domain}...")
+    show_panel("OTP Retrieval", f"Waiting for OTP at {username}@{domain}...")
+
     retry_interval = 2
     max_retries = 20
 
-    for _ in range(max_retries):
+    for attempt in range(max_retries):
         response = requests.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={username}&domain={domain}")
         if response.status_code == 200:
             messages = response.json()
@@ -131,203 +124,102 @@ def get_otp(email):
                     if otp_match:
                         otp = otp_match.group(0)
                         otp_extracted = True
-                        print(f"Extracted OTP: {otp}\n")
+                        show_panel("OTP Extracted", f"Extracted OTP: {otp}")
                         return otp
         time.sleep(retry_interval)
 
-    raise Exception("Failed to retrieve OTP within timeout period.")
+    raise Exception("Failed to retrieve OTP within the timeout period.")
 
-# Function to reliably set text in a field and verify it
+# Function to set text in a field and verify
 def set_text_reliably(field, text, field_name="field"):
     for attempt in range(2):
         field.set_text(text)
         time.sleep(0.1)
-        try:
-            entered_text = field.get_text()
-            if entered_text == text:
-                print(f"Successfully entered text '{text}' into {field_name}.\n")
-                return True
-        except Exception as e:
-            print(f"Error verifying text in {field_name}: {str(e)}")
-        print(f"Retrying text entry '{text}' into {field_name} (Attempt {attempt + 2}/2)...")
-    raise Exception(f"Failed to reliably enter text '{text}' into {field_name} after multiple attempts.")
+        if field.get_text() == text:
+            show_panel("Text Input", f"Entered text '{text}' into {field_name}.")
+            return True
+    raise Exception(f"Failed to enter text '{text}' into {field_name}.")
 
-# Function to detect specific error messages and handle them
-def handle_possible_errors():
-    try:
-        if device(text="The code has been expired, please ask for new code").exists:
-            print("Detected expired OTP. Restarting the process.")
-            close_app()
-            clear_app_data_ui()
-            automate_referral()
-
-        elif device(text="Try again later").exists or device(text="Cannot create account").exists:
-            print("Account creation limit reached or temporary block. Retrying...")
-            return False
-
-        return True
-    except Exception as e:
-        print(f"Error while checking for possible errors: {str(e)}")
-        return False
-
-# Function to click "Next Step" button or "Not Now" and verify screen transition
+# Function to click buttons and verify screen transition
 def click_button_and_verify(text, expected_text=None):
-    try:
-        button = wait_for_element({'text': text}, retry_until_found=True)
-        button.click()
-        time.sleep(0.5)
+    button = retry_on_failure(wait_for_element, {'text': text}, retry_until_found=True)
+    button.click()
+    time.sleep(0.5)
 
-        # Verify transition by checking if expected text or element appears
-        if expected_text:
-            if device(text=expected_text).exists:
-                print(f"Successfully clicked '{text}' and transitioned to the next screen.\n")
-            else:
-                print(f"'{text}' click might not have registered. Retrying...")
-                button.click()
-                time.sleep(0.5)
-                if not device(text=expected_text).exists:
-                    print(f"Button '{text}' click failed again. Taking screenshot and moving on.")
-                    device.screenshot(f"error_{text}_button.png")
-        else:
-            if not button.exists:
-                print(f"Successfully clicked '{text}' and moved to the next screen.\n")
-            else:
-                print(f"'{text}' click might not have registered. Retrying...")
-                button.click()
-                time.sleep(0.5)
-                if button.exists:
-                    print(f"Button '{text}' click failed again. Taking screenshot and moving on.")
-                    device.screenshot(f"error_{text}_button.png")
-    except Exception as e:
-        device.screenshot(f"error_click_{text}.png")
-        print(f"Error clicking '{text}': {str(e)}")
+    if expected_text:
+        if not device(text=expected_text).exists:
+            show_panel("Warning", f"'{text}' click might not have registered. Retrying...", style="bold yellow")
+            button.click()
+            time.sleep(0.5)
+            if not device(text=expected_text).exists:
+                raise Exception(f"Failed to transition after clicking '{text}'.")
 
-# Function to enter the nickname and click "Next Step"
-def enter_nickname_and_next():
+# Function to handle any possible errors on the screen
+def handle_possible_errors():
+    if device(text="The code has been expired").exists:
+        show_panel("Expired OTP", "OTP expired. Restarting the process...", style="bold red")
+        close_app()
+        clear_app_data_ui()
+        automate_referral()
+    elif device(text="Try again later").exists:
+        show_panel("Limit Reached", "Account creation limit reached. Retrying...", style="bold red")
+        return False
+    return True
+
+# Main automation function
+def automate_referral():
+    temp_email = get_temp_email()
+
+    # Start the app
+    device.app_start("io.sauces.app")
+
+    # Enter the temporary email
+    email_field = retry_on_failure(wait_for_element, {'className': "android.widget.EditText"}, retry_until_found=True)
+    set_text_reliably(email_field, temp_email, "email field")
+
+    # Log in
+    click_button_and_verify("Log in / Sign up")
+
+    # Wait for OTP and enter it
+    otp_code = get_otp(temp_email)
+    if otp_extracted:
+        otp_fields = retry_on_failure(wait_for_element, {'className': "android.widget.EditText"}, retry_until_found=True)
+        set_text_reliably(otp_fields, otp_code, "OTP field")
+
+    if not handle_possible_errors():
+        return
+
+    # Click "Next Step" four times, then click "Not Now"
+    for _ in range(4):
+        click_button_and_verify("Next Step", expected_text="Next Step")
+    click_button_and_verify("Not now")
+
+    # Enter random nickname
     random_nickname = generate_random_nickname()
-    nickname_field = wait_for_element({'className': "android.widget.EditText"}, retry_until_found=True)
+    nickname_field = retry_on_failure(wait_for_element, {'className': "android.widget.EditText"}, retry_until_found=True)
     set_text_reliably(nickname_field, random_nickname, "nickname field")
-
     click_button_and_verify("Next Step")
 
-# Function to enter referral code and click "Complete"
-def enter_referral_and_complete():
+    # Enter referral code and click "Complete"
     referral_code = "iemtejas"
-    referral_field = wait_for_element({'className': "android.widget.EditText"}, retry_until_found=True)
+    referral_field = retry_on_failure(wait_for_element, {'className': "android.widget.EditText"}, retry_until_found=True)
     set_text_reliably(referral_field, referral_code, "referral field")
+    click_button_and_verify("Complete")
 
-    # Click "Complete" and ensure transition to the next screen
-    click_button_and_verify("Complete", expected_text=None)
+    show_panel("Process Complete", "Referral process completed successfully!", style="bold green")
 
-    # Add a check to verify that the script has moved past the screen where the "Complete" button appears
-    if device(text="Complete").exists:
-        print("No need to click 'Complete' again. Proceeding to the next step.\n")
-    else:
-        print("Successfully completed the referral code step.\n")
-
-# Function to automate the referral process with timeout
-def automate_referral_with_timeout():
-    global task_completed, otp_extracted
-    task_completed = False
-    otp_extracted = False
-    try:
-        automate_referral()
-        task_completed = True
-    except Exception as e:
-        print(f"Error during automation: {str(e)}")
-        close_app()
-
-# Function to run the automation process with a timeout
-def run_automation_with_timeout():
-    global task_completed, otp_extracted
-    task_thread = threading.Thread(target=automate_referral_with_timeout)
-    task_thread.start()
-    task_thread.join(timeout=30)
-
-    if task_thread.is_alive():
-        print("Timeout reached. Moving to the next iteration.")
-        otp_extracted = False
-        close_app()
-        task_thread.join(timeout=1)
-        if task_thread.is_alive():
-            print("Task thread did not terminate. Force stopping thread.\n")
-
-    if not task_completed:
-        print("Task did not complete within the time limit.\n")
-
-# Main function to automate the process
-def automate_referral():
-    try:
-        temp_email = get_temp_email()
-
-        # Open the app
-        device.app_start("io.sauces.app")
-
-        # Enter the temp email
-        email_field = wait_for_element({'className': "android.widget.EditText"}, retry_until_found=True)
-        set_text_reliably(email_field, temp_email, "email field")
-
-        # Click "Log in / Sign up"
-        click_button_and_verify("Log in / Sign up")
-
-        # Wait for OTP input page to load
-        otp_code = get_otp(temp_email)
-        if otp_extracted:
-            print(f"Retrieved OTP: {otp_code}\n")
-
-            # Enter OTP into the app
-            otp_fields = wait_for_element({'className': "android.widget.EditText"}, retry_until_found=True)
-            set_text_reliably(otp_fields, otp_code, "OTP field")
-            print("Entered OTP successfully.\n")
-
-            # Check for any possible errors
-            if not handle_possible_errors():
-                print("An error occurred, restarting the process...\n")
-                close_app()
-                clear_app_data_ui()
-                automate_referral()
-
-            # Click "Next Step" button four times and "Not Now" once
-            for _ in range(4):
-                click_button_and_verify("Next Step", expected_text="Next Step")
-            click_button_and_verify("Not now")
-
-            # Enter random nickname and click "Next Step"
-            enter_nickname_and_next()
-
-            # Enter referral code and complete the process
-            enter_referral_and_complete()
-        else:
-            print("OTP extraction failed or timeout occurred, skipping to the next iteration.\n")
-
-    except Exception as e:
-        device.screenshot("error_automate_referral.png")
-        print(f"Error during automation: {str(e)}")
-        close_app()
-        raise
-
-# Loop to repeat the process, clearing data and restarting after each run
+# Loop the automation for specified iterations
 def run_in_loop(iterations=100):
-    error_count = 0
-
     for i in range(iterations):
+        show_panel(f"Iteration {i+1}", f"Starting iteration {i+1}/{iterations}.")
         try:
-            print(f"Starting iteration {i+1}/{iterations}...\n")
             clear_app_data_ui()
-            run_automation_with_timeout()
-            error_count = 0
-
+            automate_referral()
         except Exception as e:
-            print(f"Error occurred in iteration {i+1}: {str(e)}\n")
-            error_count += 1
-            if error_count >= 3:
-                print("Too many consecutive errors. Stopping script.")
-                break
-
+            show_panel("Error", f"Error during iteration {i+1}: {str(e)}", style="bold red")
         finally:
             close_app()
             close_open_windows()
-            print(f"Iteration {i+1} completed.\n")
 
-# Run the loop for a specified number of iterations
+# Start the automation loop for 100 iterations
 run_in_loop(iterations=100)
