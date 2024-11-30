@@ -8,7 +8,7 @@ import threading
 import os
 
 # Connect to the device
-device = u2.connect('192.168.1.35')  # Replace with your DEVICE_IP
+device = u2.connect()
 
 # Define global flags
 task_completed = False
@@ -31,7 +31,11 @@ def close_app():
     time.sleep(0.1)
     print("App closed.\n")
 
-# Function to wait for an element with frequent checks for fast response
+# Function to sanitize filenames
+def sanitize_filename(name):
+    return re.sub(r'[\\/*?:"<>|]', '_', name)
+
+# Updated function to wait for an element with frequent checks for fast response
 def wait_for_element(selector, timeout=5, interval=0.05, retry_until_found=False):
     start_time = time.time()
     while True:
@@ -42,7 +46,8 @@ def wait_for_element(selector, timeout=5, interval=0.05, retry_until_found=False
         except Exception as e:
             print(f"Encountered an error while waiting for element: {str(e)}")
         if not retry_until_found and time.time() - start_time > timeout:
-            device.screenshot(f"error_{selector.get('text', 'unknown')}.png")
+            file_name = f"error_{sanitize_filename(selector.get('text', 'unknown'))}.png"
+            device.screenshot(file_name)
             raise Exception(f"Element with selector {selector} not found within {timeout} seconds.")
         time.sleep(interval)
 
@@ -171,14 +176,13 @@ def handle_possible_errors():
         print(f"Error while checking for possible errors: {str(e)}")
         return False
 
-# Function to click "Next Step" button or "Not Now" and verify screen transition
+# Updated function to click a button and verify
 def click_button_and_verify(text, expected_text=None):
     try:
         button = wait_for_element({'text': text}, retry_until_found=True)
         button.click()
         time.sleep(0.5)
 
-        # Verify transition by checking if expected text or element appears
         if expected_text:
             if device(text=expected_text).exists:
                 print(f"Successfully clicked '{text}' and transitioned to the next screen.\n")
@@ -188,7 +192,7 @@ def click_button_and_verify(text, expected_text=None):
                 time.sleep(0.5)
                 if not device(text=expected_text).exists:
                     print(f"Button '{text}' click failed again. Taking screenshot and moving on.")
-                    device.screenshot(f"error_{text}_button.png")
+                    device.screenshot(f"error_{sanitize_filename(text)}_button.png")
         else:
             if not button.exists:
                 print(f"Successfully clicked '{text}' and moved to the next screen.\n")
@@ -198,9 +202,9 @@ def click_button_and_verify(text, expected_text=None):
                 time.sleep(0.5)
                 if button.exists:
                     print(f"Button '{text}' click failed again. Taking screenshot and moving on.")
-                    device.screenshot(f"error_{text}_button.png")
+                    device.screenshot(f"error_{sanitize_filename(text)}_button.png")
     except Exception as e:
-        device.screenshot(f"error_click_{text}.png")
+        device.screenshot(f"error_click_{sanitize_filename(text)}.png")
         print(f"Error clicking '{text}': {str(e)}")
 
 # Function to enter the nickname and click "Next Step"
@@ -349,6 +353,3 @@ def run_in_loop(iterations=999):
 
 # Run the loop for a specified number of iterations
 run_in_loop(iterations=999)
-
-
-
