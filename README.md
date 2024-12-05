@@ -37,7 +37,7 @@ pip install uiautomator2 requests
   - Use a USB cable to connect your Android device to your computer.
   - Ensure that the device is detected, and allow USB debugging if prompted on the device.
 
-### **4. Place Sauces App on Home Screen**
+### **4. Place App on Home Screen**
 
 Ensure the Sauces app is placed on the home screen of your Android device. This is necessary for the automation to work correctly.
 
