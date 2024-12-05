@@ -50,7 +50,7 @@ Ensure the Sauces app is placed on the home screen of your Android device. This 
 In Command Prompt or Terminal, navigate to the directory where you want to clone the repository, and run:
 
 ```bash
-git clone https://github.com/iemtejas/Sauces.git
+git clone https://github.com/iemtejasvi/Sauces.git
 ```
 
 ### **2. Change Directory**
@@ -63,7 +63,7 @@ cd Sauces
 
 ### **3. Update the Referral Code**
 
-Open the script file (`sauces.py`) and update the referral code from `"iemtejas"` to your own referral code if needed. Save the file after making the changes.
+Open the script file (`sauces.py`) and update the referral code from `"iemtejas"` to your own referral code. Save the file after making the changes.
 
 ### **4. Execute the Script**
 
