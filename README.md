@@ -1,6 +1,6 @@
 
 
-# **Automation Script for nearly all Ice network projects (DoctorX, Sauces, Crypto Mayors etc. - README**
+# **Automation Script for nearly all "Ice Open Network" projects (DoctorX, Sauces, Crypto Mayors etc.)**
 
 ## **Overview**
 
