@@ -150,7 +150,7 @@ def enter_nickname_and_next():
     time.sleep(2)  # Ensure referral window loads properly
 
 def enter_referral_and_complete():
-    referral_code = "iemtejas"
+    referral_code = "naveen012"
     referral_field = wait_for_element({'className': "android.widget.EditText"}, retry_until_found=True)
     set_text_reliably(referral_field, referral_code, "referral field")
 
@@ -196,4 +196,4 @@ def automate_registration(app_name, iterations=10000, timeout_per_iteration=50):
             time.sleep(1)  # Ensure stabilization before next iteration
 
 # Run the script
-automate_registration("Crypto Mayors")
+automate_registration("Sunwaves")
