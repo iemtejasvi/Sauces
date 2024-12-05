@@ -69,15 +69,18 @@ def set_text_reliably(element, text, label):
         print(f"❌ Failed to set text in {label}: {e}")
 
 def click_button_and_verify(button_text, timeout=20):
+    """
+    Wait for the button to load and click it, ensuring it exists before clicking.
+    """
     start_time = time.time()
     while time.time() - start_time < timeout:
         button = device(text=button_text)
         if button.exists:
             button.click()
-            time.sleep(2)  # Allow UI state to update
+            time.sleep(0.5)  # Faster UI transition allowance
             print(f"✅ Clicked on button: {button_text}")
             return
-        time.sleep(1)
+        time.sleep(0.5)  # Check again quickly
     raise Exception(f"❌ Button '{button_text}' not found within timeout.")
 
 def generate_random_nickname(length=10):
@@ -118,16 +121,24 @@ def clear_app_data(app_name):
     device.press("home")
 
 def handle_next_steps():
-    # Click "Next Step" button four times
-    for i in range(4):
-        print(f"🔄 Waiting for 'Next Step' button... (Step {i+1}/4)")
-        click_button_and_verify("Next Step")
-        print(f"✅ Completed 'Next Step' {i+1}/4.")
+    """
+    Handles the sequence of clicking "Next Step" 4 times and "Not now" once.
+    Optimized for faster subsequent clicks after the first.
+    """
+    try:
+        # Click "Next Step" button four times
+        for i in range(4):
+            retry_timeout = 20 if i == 0 else 5  # Full timeout for the first click, faster retries for the rest
+            print(f"🔄 Waiting for 'Next Step' button... (Step {i+1}/4)")
+            click_button_and_verify("Next Step", timeout=retry_timeout)
+            print(f"✅ Completed 'Next Step' {i+1}/4.")
 
-    # Click "Not now" button
-    print("🔄 Waiting for 'Not now' button...")
-    click_button_and_verify("Not now")
-    print("✅ Completed 'Not now' action.")
+        # Click "Not now" button
+        print("🔄 Waiting for 'Not now' button...")
+        click_button_and_verify("Not now", timeout=5)  # Faster retry for "Not now"
+        print("✅ Completed 'Not now' action.")
+    except Exception as e:
+        print(f"❌ Error during 'Next Step' or 'Not now': {e}")
 
 def enter_nickname_and_next():
     random_nickname = generate_random_nickname()
@@ -136,6 +147,7 @@ def enter_nickname_and_next():
     set_text_reliably(nickname_field, random_nickname, "nickname field")
 
     click_button_and_verify("Next Step")
+    time.sleep(2)  # Ensure referral window loads properly
 
 def enter_referral_and_complete():
     referral_code = "iemtejas"
@@ -146,7 +158,7 @@ def enter_referral_and_complete():
     print("✅ Completed referral entry.")
 
 # Main Script
-def automate_registration(app_name, iterations=100, timeout_per_iteration=50):
+def automate_registration(app_name, iterations=10000, timeout_per_iteration=50):
     for iteration in range(iterations):
         start_time = time.time()
         try:
@@ -181,7 +193,7 @@ def automate_registration(app_name, iterations=100, timeout_per_iteration=50):
             print(f"❌ Error in iteration {iteration + 1}: {e}")
         finally:
             device.press("home")
-            time.sleep(2)  # Allow system to stabilize
+            time.sleep(1)  # Ensure stabilization before next iteration
 
 # Run the script
-automate_registration("DoctorX")
+automate_registration("Crypto Mayors")
