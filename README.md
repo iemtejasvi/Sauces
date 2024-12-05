@@ -1,6 +1,6 @@
 
 
-# **Sauces Automation Script - README**
+# **Automation Script for nearly all Ice network projects (DoctorX, Sauces, Crypto Mayors etc. - README**
 
 ## **Overview**
 
@@ -80,7 +80,15 @@ python sauces.py
   - **Script Failures**: The script may fail due to various mobile-specific issues like UI elements not loading in time, device lag, or network issues. If the script fails, monitor the logs and adjust timeouts if necessary.
   - **Timeout Issues**: If the script frequently fails due to timeouts, consider increasing the timeout values in the script.
 
----
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## **3 very Important Steps**
+
+1. **Update the referral code.** The current referral code is "iemtejas." Locate it in the code and replace it with your own referral code.  
+   
+2. **Modify the app name.** Update the script with the name of the app you are working on. For example, if you want to run the script on DoctorX, find the last line of the code, such as `automate_registration("Crypto Mayors")`, and replace `"Crypto Mayors"` with the exact name of the app you are working on. Ensure the name matches the app name exactly.  
+
+3. **Place the app on the home screen.** This is the most important step, so make sure the app is positioned correctly on the home screen.  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## **Limitations**
 
